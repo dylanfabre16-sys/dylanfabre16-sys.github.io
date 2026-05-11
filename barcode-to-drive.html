@@ -293,6 +293,14 @@
   #drive-msg.ok   { background: var(--accent-dim); border: 1px solid #00e5a040; color: var(--accent); display: block; }
   #drive-msg.err  { background: #2a1520; border: 1px solid #ff4d6a40; color: var(--danger); display: block; }
 
+  .torch-active {
+    background: #ffb740 !important;
+    color: #000 !important;
+    border-color: #ffb740 !important;
+  }
+
+  #zoom-select:not(:disabled) { color: var(--text); }
+
   #compat-warn {
     background: #2a1e10;
     border: 1px solid #ffb74040;
@@ -345,6 +353,20 @@
         Start Camera
       </button>
       <button class="btn btn-ghost" id="stop-btn" onclick="stopCamera()" disabled>Stop</button>
+      <button class="btn btn-ghost" id="torch-btn" onclick="toggleTorch()" disabled title="Flash">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+      </button>
+      <select id="zoom-select" onchange="applyZoom()" disabled style="
+        background:var(--surface);border:1px solid var(--border);border-radius:5px;
+        color:var(--muted);font-family:'Space Mono',monospace;font-size:11px;
+        padding:8px 10px;cursor:pointer;outline:none;">
+        <option value="1">1x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2x</option>
+        <option value="3">3x</option>
+      </select>
     </div>
 
     <div id="flash">
@@ -373,7 +395,7 @@
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
       </svg>
-      Copy as Table
+      Copy &amp; Clear
     </button>
 
     <div id="copy-msg" style="margin-top:10px;font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);opacity:0;transition:opacity .25s;">
@@ -451,7 +473,15 @@ async function startCamera() {
     document.getElementById('dot').classList.add('live');
 
     video.onloadedmetadata = () => {
-      video.play().then(() => { rafId = requestAnimationFrame(scanFrame); });
+      video.play().then(async () => {
+        rafId = requestAnimationFrame(scanFrame);
+        await applyZoom();
+        // Enable torch button only if track supports it
+        const track = stream.getVideoTracks()[0];
+        const caps  = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.torch) document.getElementById('torch-btn').disabled = false;
+        document.getElementById('zoom-select').disabled = false;
+      });
     };
 
   } catch (e) {
@@ -475,6 +505,7 @@ async function startCamera() {
 function stopCamera() {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  torchOn = false;
 
   const video = document.getElementById('video');
   video.srcObject = null;
@@ -485,6 +516,9 @@ function stopCamera() {
   document.getElementById('overlay').style.display = 'none';
   document.getElementById('start-btn').disabled = false;
   document.getElementById('stop-btn').disabled = true;
+  document.getElementById('torch-btn').disabled = true;
+  document.getElementById('torch-btn').classList.remove('torch-active');
+  document.getElementById('zoom-select').disabled = true;
   document.getElementById('dot').classList.remove('live');
 }
 
@@ -495,6 +529,7 @@ function addScan(value, format) {
   scans.push({ value, format: format || '', time: ts() });
   renderList();
   flash(value);
+  beep();
 }
 
 function removeItem(i) { scans.splice(i, 1); renderList(); }
@@ -568,17 +603,60 @@ function buildFileContent() {
   ].join('\n');
 }
 
-// ── Copy as table ────────────────────────────────────────────────
+// ── Copy & Clear ──────────────────────────────────────────────────
 function copyTable() {
   if (scans.length === 0) return;
-  // Tab-separated so it pastes as a table in Sheets/Excel
   const rows = ['Time	Barcode	Format', ...scans.map(s => `${s.time}	${s.value}	${s.format}`)];
   navigator.clipboard.writeText(rows.join('\n')).then(() => {
+    scans = []; lastVal = null; renderList();
     const msg = document.getElementById('copy-msg');
     msg.style.opacity = '1';
     clearTimeout(msg._t);
     msg._t = setTimeout(() => msg.style.opacity = '0', 2500);
   }).catch(e => alert('Copy failed: ' + e.message));
+}
+
+// ── Beep ──────────────────────────────────────────────────────────
+let audioCtx = null;
+function beep() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1480, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+  } catch(_) {}
+}
+
+// ── Torch ─────────────────────────────────────────────────────────
+let torchOn = false;
+async function toggleTorch() {
+  if (!stream) return;
+  const track = stream.getVideoTracks()[0];
+  torchOn = !torchOn;
+  try {
+    await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+    const btn = document.getElementById('torch-btn');
+    btn.classList.toggle('torch-active', torchOn);
+  } catch(_) { torchOn = !torchOn; }
+}
+
+// ── Zoom ──────────────────────────────────────────────────────────
+async function applyZoom() {
+  if (!stream) return;
+  const track = stream.getVideoTracks()[0];
+  const zoom  = parseFloat(document.getElementById('zoom-select').value);
+  try {
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if (caps.zoom) {
+      const clamped = Math.min(Math.max(zoom, caps.zoom.min), caps.zoom.max);
+      await track.applyConstraints({ advanced: [{ zoom: clamped }] });
+    }
+  } catch(_) {}
 }
 
 renderList();
