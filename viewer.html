@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barcode Log</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0e0e0f;
+    --surface: #18181a;
+    --border: #2a2a2e;
+    --accent: #00e5a0;
+    --text: #e8e8ea;
+    --muted: #6b6b72;
+    --danger: #ff4d6a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .subtitle {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: blink 2s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+  .header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .countdown {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: 5px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: none;
+  }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: var(--text); border-color: #555; }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid #ff4d6a30; }
+  .btn-danger:hover { background: #ff4d6a12; }
+
+  /* Setup panel */
+  #setup-panel {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 22px;
+    display: none;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  #setup-panel.open { display: flex; }
+
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--muted);
+  }
+  .field input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--text);
+    outline: none;
+    width: 220px;
+  }
+  .field input:focus { border-color: var(--accent); }
+
+  /* Status bar */
+  #status-bar {
+    padding: 10px 22px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  #status-bar .badge {
+    background: var(--accent);
+    color: #000;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+
+  /* Table */
+  .table-wrap {
+    flex: 1;
+    overflow: auto;
+    padding: 16px 22px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead tr {
+    border-bottom: 2px solid var(--border);
+  }
+
+  th {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--muted);
+    text-align: left;
+    padding: 8px 12px 10px;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+  }
+
+  td.barcode { color: var(--accent); font-size: 13px; }
+  td.format  { color: var(--muted); font-size: 11px; }
+  td.ts      { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  td.idx     { color: var(--border); font-size: 10px; width: 40px; }
+
+  tbody tr:hover td { background: var(--surface); }
+
+  tbody tr.new-row td {
+    animation: highlight .8s ease;
+  }
+  @keyframes highlight {
+    from { background: #00e5a015; }
+    to   { background: transparent; }
+  }
+
+  .empty-state {
+    padding: 60px 22px;
+    text-align: center;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    line-height: 2;
+  }
+
+  #err-msg {
+    padding: 12px 22px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--danger);
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="dot"></div>
+  <span class="logo">Barcode Log</span>
+  <span class="subtitle">live view</span>
+  <div class="header-right">
+    <span class="countdown" id="countdown">refresh in 5s</span>
+    <button class="btn btn-ghost" onclick="toggleSetup()">⚙ Setup</button>
+    <button class="btn btn-danger" onclick="clearCsv()" id="clear-btn">Clear CSV</button>
+  </div>
+</header>
+
+<div id="setup-panel">
+  <div class="field">
+    <label>GitHub Token</label>
+    <input id="s-token" type="password" placeholder="ghp_..."/>
+  </div>
+  <div class="field">
+    <label>Repo (owner/name)</label>
+    <input id="s-repo" type="text" placeholder="username/repo"/>
+  </div>
+  <div class="field">
+    <label>CSV File</label>
+    <input id="s-file" type="text" value="barcodes.csv"/>
+  </div>
+  <button class="btn btn-ghost" onclick="saveSetup()" style="margin-bottom:1px;">Save</button>
+</div>
+
+<div id="status-bar">
+  <span id="status-text">Waiting for setup…</span>
+</div>
+
+<div id="err-msg"></div>
+
+<div class="table-wrap" id="table-wrap">
+  <div class="empty-state" id="empty-state">
+    No data yet.<br>
+    Configure the repo above (⚙) then scan some barcodes.
+  </div>
+</div>
+
+<script>
+const INTERVAL = 5; // seconds
+let timer = INTERVAL;
+let intervalId = null;
+let lastRowCount = 0;
+let knownRows = new Set();
+
+function toggleSetup() {
+  const p = document.getElementById('setup-panel');
+  const open = p.classList.toggle('open');
+  if (open) {
+    document.getElementById('s-token').value = localStorage.getItem('gh_token') || '';
+    document.getElementById('s-repo').value  = localStorage.getItem('gh_repo')  || '';
+    document.getElementById('s-file').value  = localStorage.getItem('gh_file')  || 'barcodes.csv';
+  }
+}
+
+function saveSetup() {
+  localStorage.setItem('gh_token', document.getElementById('s-token').value.trim());
+  localStorage.setItem('gh_repo',  document.getElementById('s-repo').value.trim());
+  localStorage.setItem('gh_file',  document.getElementById('s-file').value.trim() || 'barcodes.csv');
+  document.getElementById('setup-panel').classList.remove('open');
+  fetchCsv();
+}
+
+function getConfig() {
+  return {
+    token: localStorage.getItem('gh_token'),
+    repo:  localStorage.getItem('gh_repo'),
+    file:  localStorage.getItem('gh_file') || 'barcodes.csv'
+  };
+}
+
+function setStatus(text, count) {
+  document.getElementById('status-text').textContent = text;
+  const bar = document.getElementById('status-bar');
+  // Remove old badge
+  const old = bar.querySelector('.badge');
+  if (old) old.remove();
+  if (count !== undefined) {
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = count + ' rows';
+    bar.appendChild(badge);
+  }
+}
+
+function showErr(msg) {
+  const el = document.getElementById('err-msg');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+async function fetchCsv() {
+  const { token, repo, file } = getConfig();
+  if (!token || !repo) {
+    setStatus('Configure repo in ⚙ setup');
+    return;
+  }
+
+  showErr('');
+  setStatus('Fetching…');
+
+  try {
+    // Use raw content URL (no CORS issues, no auth needed for public repos)
+    // But we need auth for private repos, so use API
+    const res = await fetch(`https://api.github.com/repos/${repo}/contents/${file}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3.raw' }
+    });
+
+    if (res.status === 404) {
+      setStatus('CSV file not found — scan some barcodes first.');
+      document.getElementById('table-wrap').innerHTML = '<div class="empty-state">No CSV file yet.<br>Scan some barcodes on the scanner page.</div>';
+      return;
+    }
+    if (!res.ok) throw new Error(`GitHub ${res.status}`);
+
+    const text = await res.text();
+    renderTable(text);
+    setStatus(`Last updated ${new Date().toLocaleTimeString()}`);
+  } catch(e) {
+    showErr('✗ ' + e.message);
+    setStatus('Fetch failed');
+  }
+}
+
+function renderTable(csv) {
+  const lines = csv.trim().split('\n').filter(l => l.trim());
+  if (lines.length <= 1) {
+    document.getElementById('table-wrap').innerHTML = '<div class="empty-state">CSV is empty — no barcodes scanned yet.</div>';
+    setStatus('Empty file', 0);
+    return;
+  }
+
+  const headers = lines[0].split(',');
+  const rows    = lines.slice(1).reverse(); // newest first
+
+  setStatus(`Last updated ${new Date().toLocaleTimeString()}`, rows.length);
+
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr>
+    <th>#</th>
+    ${headers.map(h => `<th>${h}</th>`).join('')}
+  </tr></thead>`;
+
+  const tbody = document.createElement('tbody');
+  rows.forEach((line, i) => {
+    const cols = line.split(',');
+    const key  = line.trim();
+    const isNew = !knownRows.has(key) && lastRowCount > 0;
+    if (isNew) knownRows.add(key);
+
+    const tr = document.createElement('tr');
+    if (isNew) tr.className = 'new-row';
+
+    const rowNum = rows.length - i;
+    tr.innerHTML = `<td class="idx">${rowNum}</td>` +
+      cols.map((c, ci) => {
+        let cls = '';
+        if (ci === 1) cls = 'barcode';
+        else if (ci === 2) cls = 'format';
+        else cls = 'ts';
+        return `<td class="${cls}">${c.trim()}</td>`;
+      }).join('');
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  const wrap = document.getElementById('table-wrap');
+  wrap.innerHTML = '';
+  wrap.appendChild(table);
+
+  // Track known rows for highlight on next refresh
+  if (lastRowCount === 0) lines.slice(1).forEach(l => knownRows.add(l.trim()));
+  lastRowCount = rows.length;
+}
+
+async function clearCsv() {
+  const { token, repo, file } = getConfig();
+  if (!token || !repo) { toggleSetup(); return; }
+  if (!confirm(`Delete all rows in ${file}?`)) return;
+
+  const apiUrl = `https://api.github.com/repos/${repo}/contents/${file}`;
+  const headers = { Authorization: `token ${token}`, 'Content-Type': 'application/json' };
+
+  try {
+    const getRes = await fetch(apiUrl, { headers });
+    if (!getRes.ok) return;
+    const data = await getRes.json();
+    const blank = btoa(unescape(encodeURIComponent('Timestamp,Barcode,Format\n')));
+    await fetch(apiUrl, {
+      method: 'PUT', headers,
+      body: JSON.stringify({ message: 'Clear barcodes', content: blank, sha: data.sha })
+    });
+    knownRows.clear(); lastRowCount = 0;
+    fetchCsv();
+  } catch(e) { showErr('✗ ' + e.message); }
+}
+
+// Countdown + auto refresh
+function startRefresh() {
+  timer = INTERVAL;
+  document.getElementById('countdown').textContent = `refresh in ${timer}s`;
+  intervalId = setInterval(() => {
+    timer--;
+    document.getElementById('countdown').textContent = `refresh in ${timer}s`;
+    if (timer <= 0) {
+      timer = INTERVAL;
+      fetchCsv();
+    }
+  }, 1000);
+}
+
+// Init
+fetchCsv();
+startRefresh();
+</script>
+</body>
+</html>

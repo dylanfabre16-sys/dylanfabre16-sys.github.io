@@ -391,16 +391,27 @@
 
     <div class="divider"></div>
 
-    <button class="btn btn-primary" onclick="copyTable()" id="copy-btn" style="width:100%;justify-content:center;">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-      </svg>
-      Copy &amp; Clear
-    </button>
-
-    <div id="copy-msg" style="margin-top:10px;font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);opacity:0;transition:opacity .25s;">
-      ✓ Copied — paste into Sheets, Excel, or Notes
+    <!-- GitHub settings (collapsed) -->
+    <div id="gh-setup" style="display:none;margin-bottom:10px;">
+      <div class="fname-row"><label>Token</label><input id="gh-token" type="password" placeholder="ghp_..." style="font-size:10px;"/></div>
+      <div class="fname-row"><label>Repo</label><input id="gh-repo" type="text" placeholder="username/repo" style="font-size:10px;"/></div>
+      <div class="fname-row"><label>File</label><input id="gh-file" type="text" value="barcodes.csv" style="font-size:10px;"/></div>
+      <button class="btn btn-ghost" onclick="saveGhSettings()" style="width:100%;justify-content:center;font-size:10px;margin-bottom:4px;">Save Settings</button>
+      <div style="font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);line-height:1.6;">
+        Token needs <b>Contents: Read &amp; Write</b> on the repo.<br>
+        github.com → Settings → Developer settings → Fine-grained tokens
+      </div>
     </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <button class="btn btn-primary" id="gh-save-btn" onclick="saveToGithub()" style="flex:1;justify-content:center;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        Save to CSV
+      </button>
+      <button class="btn btn-ghost" onclick="toggleGhSetup()" style="padding:9px 10px;font-size:11px;" title="Settings">⚙</button>
+    </div>
+
+    <div id="gh-msg" style="font-family:'Space Mono',monospace;font-size:11px;min-height:20px;line-height:1.5;"></div>
   </div>
 </main>
 
@@ -603,17 +614,79 @@ function buildFileContent() {
   ].join('\n');
 }
 
-// ── Copy & Clear ──────────────────────────────────────────────────
-function copyTable() {
-  if (scans.length === 0) return;
-  const rows = ['Time	Barcode	Format', ...scans.map(s => `${s.time}	${s.value}	${s.format}`)];
-  navigator.clipboard.writeText(rows.join('\n')).then(() => {
+// ── GitHub CSV ────────────────────────────────────────────────────
+function ghMsg(text, type) {
+  const el = document.getElementById('gh-msg');
+  el.textContent = text;
+  el.style.color = type === 'ok' ? 'var(--accent)' : type === 'err' ? 'var(--danger)' : 'var(--muted)';
+}
+
+function toggleGhSetup() {
+  const el = document.getElementById('gh-setup');
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  if (el.style.display === 'block') {
+    document.getElementById('gh-token').value = localStorage.getItem('gh_token') || '';
+    document.getElementById('gh-repo').value  = localStorage.getItem('gh_repo')  || '';
+    document.getElementById('gh-file').value  = localStorage.getItem('gh_file')  || 'barcodes.csv';
+  }
+}
+
+function saveGhSettings() {
+  localStorage.setItem('gh_token', document.getElementById('gh-token').value.trim());
+  localStorage.setItem('gh_repo',  document.getElementById('gh-repo').value.trim());
+  localStorage.setItem('gh_file',  document.getElementById('gh-file').value.trim() || 'barcodes.csv');
+  document.getElementById('gh-setup').style.display = 'none';
+  ghMsg('Settings saved.', 'ok');
+}
+
+async function saveToGithub() {
+  if (scans.length === 0) { ghMsg('Nothing to save.', 'err'); return; }
+  const token = localStorage.getItem('gh_token');
+  const repo  = localStorage.getItem('gh_repo');
+  const file  = localStorage.getItem('gh_file') || 'barcodes.csv';
+  if (!token || !repo) { toggleGhSetup(); ghMsg('Enter GitHub settings first (⚙).', 'err'); return; }
+
+  const btn = document.getElementById('gh-save-btn');
+  btn.disabled = true;
+  ghMsg('Saving…', '');
+
+  const apiUrl = `https://api.github.com/repos/${repo}/contents/${file}`;
+  const headers = { Authorization: `token ${token}`, 'Content-Type': 'application/json' };
+
+  try {
+    // Get current file (need SHA to update)
+    let sha = null, existing = '';
+    const getRes = await fetch(apiUrl, { headers });
+    if (getRes.ok) {
+      const data = await getRes.json();
+      sha = data.sha;
+      existing = atob(data.content.replace(/\n/g, ''));
+    } else if (getRes.status !== 404) {
+      throw new Error(`GitHub ${getRes.status}`);
+    }
+
+    // Append new rows
+    const header = 'Timestamp,Barcode,Format\n';
+    const newRows = scans.map(s => `${new Date().toISOString().slice(0,10)} ${s.time},${s.value},${s.format}`).join('\n') + '\n';
+    const combined = existing || header;
+    const updated  = combined + newRows;
+
+    const body = { message: `Add ${scans.length} barcode(s)`, content: btoa(unescape(encodeURIComponent(updated))) };
+    if (sha) body.sha = sha;
+
+    const putRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+    if (!putRes.ok) {
+      const err = await putRes.json();
+      throw new Error(err.message || `PUT ${putRes.status}`);
+    }
+
+    ghMsg(`✓ ${scans.length} row(s) saved to ${file}`, 'ok');
     scans = []; lastVal = null; renderList();
-    const msg = document.getElementById('copy-msg');
-    msg.style.opacity = '1';
-    clearTimeout(msg._t);
-    msg._t = setTimeout(() => msg.style.opacity = '0', 2500);
-  }).catch(e => alert('Copy failed: ' + e.message));
+  } catch(e) {
+    ghMsg('✗ ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ── Beep ──────────────────────────────────────────────────────────
