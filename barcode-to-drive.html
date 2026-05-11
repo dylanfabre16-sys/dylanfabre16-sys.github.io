@@ -588,7 +588,7 @@ async function scanFrame() {
       const barcodes = await detector.detect(video);
       const now = Date.now();
       for (const b of barcodes) {
-        if (b.rawValue === lastVal && now < cooldownEnd) continue;
+        if (now < cooldownEnd) continue;
         lastVal     = b.rawValue;
         cooldownEnd = now + getCooldown();
         addScan(b.rawValue, b.format);
