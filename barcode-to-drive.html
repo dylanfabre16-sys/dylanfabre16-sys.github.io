@@ -860,26 +860,17 @@ let currentMode = 'barcode';
 function setMode(mode) {
   if (mode === currentMode) return;
   currentMode = mode;
-
   document.getElementById('tab-barcode').classList.toggle('active', mode === 'barcode');
   document.getElementById('tab-ocr').classList.toggle('active', mode === 'ocr');
   document.getElementById('barcode-panel').style.display = mode === 'barcode' ? 'block' : 'none';
   document.getElementById('ocr-panel').style.display     = mode === 'ocr'     ? 'block' : 'none';
-
-  if (mode === 'ocr') {
-    // Stop barcode scanner if running
-    if (stream) stopCamera();
-    ocrStartCamera();
-  } else {
-    ocrStopCamera();
-    ocrRetake();
-  }
+  if (mode === 'ocr') { if (stream) stopCamera(); ocrStartCamera(); }
+  else { ocrStopCamera(); ocrRetake(); }
 }
 
-// ── OCR camera ────────────────────────────────────────────────────
 let ocrStream  = null;
 let ocrTorchOn = false;
-let ocrPhoto   = null;   // ImageBitmap of captured frame
+let ocrPhoto   = null;
 let ocrWords   = [];
 let selected   = new Set();
 
@@ -887,19 +878,16 @@ async function ocrStartCamera() {
   try {
     ocrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     const v = document.getElementById('ocr-video');
-    v.srcObject = ocrStream;
-    v.style.display = '';
-    document.getElementById('ocr-canvas').style.display = 'none';
+    v.srcObject = ocrStream; v.style.display = '';
+    document.getElementById('ocr-canvas').style.display      = 'none';
     document.getElementById('ocr-capture-btn').style.display = '';
     document.getElementById('ocr-retake-btn').style.display  = 'none';
     document.getElementById('ocr-add-btn').style.display     = 'none';
     document.getElementById('ocr-status').textContent = 'Point camera at text and tap Capture.';
-
-    // Enable torch/zoom if supported
     const track = ocrStream.getVideoTracks()[0];
     const caps  = track.getCapabilities ? track.getCapabilities() : {};
     document.getElementById('ocr-torch-btn').disabled = !caps.torch;
-    document.getElementById('ocr-zoom').disabled = !caps.zoom;
+    document.getElementById('ocr-zoom').disabled      = !caps.zoom;
     if (caps.zoom) document.getElementById('ocr-zoom').style.color = 'var(--text)';
   } catch(e) {
     document.getElementById('ocr-status').textContent = 'Camera error: ' + e.message;
@@ -911,7 +899,7 @@ function ocrStopCamera() {
   ocrTorchOn = false;
   document.getElementById('ocr-torch-btn').classList.remove('torch-active');
   document.getElementById('ocr-torch-btn').disabled = true;
-  document.getElementById('ocr-zoom').disabled = true;
+  document.getElementById('ocr-zoom').disabled      = true;
 }
 
 async function ocrToggleTorch() {
@@ -925,72 +913,47 @@ async function ocrToggleTorch() {
 
 async function ocrApplyZoom() {
   if (!ocrStream) return;
-  const track = ocrStream.getVideoTracks()[0];
-  const zoom  = parseFloat(document.getElementById('ocr-zoom').value);
+  const zoom = parseFloat(document.getElementById('ocr-zoom').value);
   try {
-    const caps = track.getCapabilities ? track.getCapabilities() : {};
-    if (caps.zoom) {
-      await track.applyConstraints({ advanced: [{ zoom: Math.min(Math.max(zoom, caps.zoom.min), caps.zoom.max) }] });
-    }
+    const caps = ocrStream.getVideoTracks()[0].getCapabilities();
+    if (caps.zoom)
+      await ocrStream.getVideoTracks()[0].applyConstraints({ advanced: [{ zoom: Math.min(Math.max(zoom, caps.zoom.min), caps.zoom.max) }] });
   } catch(_) {}
 }
 
-// ── Capture + OCR ─────────────────────────────────────────────────
 async function ocrCapture() {
   const video = document.getElementById('ocr-video');
   if (!ocrStream || video.readyState < 2) return;
-
-  // Snapshot
   const canvas = document.getElementById('ocr-canvas');
-  canvas.width  = video.videoWidth;
-  canvas.height = video.videoHeight;
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0);
   ocrPhoto = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-  // Show canvas, hide video
-  video.style.display = 'none';
-  canvas.style.display = '';
+  video.style.display = 'none'; canvas.style.display = '';
   document.getElementById('ocr-capture-btn').style.display = 'none';
   document.getElementById('ocr-retake-btn').style.display  = '';
-  document.getElementById('ocr-status').textContent = 'Running OCR…';
+  document.getElementById('ocr-status').textContent = 'Running OCR\u2026';
   const prog = document.getElementById('ocr-progress');
   const bar  = document.getElementById('ocr-bar');
   prog.style.display = ''; bar.style.width = '0%';
-
-  selected.clear(); ocrWords = [];
-  canvas.onclick = null;
-
+  selected.clear(); ocrWords = []; canvas.onclick = null;
   try {
     const result = await Tesseract.recognize(canvas, 'eng', {
-      logger: m => {
-        if (m.status === 'recognizing text')
-          bar.style.width = (m.progress * 100).toFixed(0) + '%';
-      }
+      logger: m => { if (m.status === 'recognizing text') bar.style.width = (m.progress*100).toFixed(0)+'%'; }
     });
-
     prog.style.display = 'none';
-
     ocrWords = result.data.words
       .filter(w => w.confidence > 40 && w.text.trim().length > 1)
-      .map(w => ({
-        text: w.text.trim(),
-        x0: w.bbox.x0, y0: w.bbox.y0,
-        x1: w.bbox.x1, y1: w.bbox.y1
-      }));
-
+      .map(w => ({ text: w.text.trim(), x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1 }));
     if (ocrWords.length === 0) {
-      document.getElementById('ocr-status').textContent = 'No text found. Try better lighting or zoom in closer.';
-      drawCanvas();
-      return;
+      document.getElementById('ocr-status').textContent = 'No text found. Try better lighting or zoom in.';
+      drawCanvas(); return;
     }
-
     drawCanvas();
     canvas.addEventListener('click', onCanvasClick);
-    document.getElementById('ocr-add-btn').style.display = '';
-    document.getElementById('ocr-add-btn').disabled = true;
-    document.getElementById('ocr-status').textContent = `${ocrWords.length} word(s) — tap to select.`;
-
+    const btn = document.getElementById('ocr-add-btn');
+    btn.style.display = ''; btn.disabled = true; btn.textContent = 'Add Selected';
+    document.getElementById('ocr-status').textContent = ocrWords.length + ' word(s) \u2014 tap to select.';
   } catch(e) {
     prog.style.display = 'none';
     document.getElementById('ocr-status').textContent = 'OCR error: ' + e.message;
@@ -999,59 +962,43 @@ async function ocrCapture() {
 
 function drawCanvas() {
   const canvas = document.getElementById('ocr-canvas');
-  const ctx    = canvas.getContext('2d');
-
-  // Restore original photo
+  const ctx = canvas.getContext('2d');
   if (ocrPhoto) ctx.putImageData(ocrPhoto, 0, 0);
-
+  const lw = Math.max(canvas.width * 0.003, 2);
   ocrWords.forEach((w, i) => {
-    const isSelected = selected.has(i);
-    ctx.strokeStyle = isSelected ? '#ffffff' : '#00e5a0';
-    ctx.lineWidth   = Math.max(canvas.width * 0.003, 2);
-    ctx.fillStyle   = isSelected ? 'rgba(0,229,160,0.4)' : 'rgba(0,229,160,0.15)';
-
-    const pad = 4;
+    const sel = selected.has(i), pad = 4;
+    ctx.strokeStyle = sel ? '#ffffff' : '#00e5a0';
+    ctx.fillStyle   = sel ? 'rgba(0,229,160,0.4)' : 'rgba(0,229,160,0.15)';
+    ctx.lineWidth   = lw;
     ctx.beginPath();
-    ctx.roundRect(w.x0 - pad, w.y0 - pad, (w.x1 - w.x0) + pad*2, (w.y1 - w.y0) + pad*2, 4);
-    ctx.fill();
-    ctx.stroke();
-
-    // Label
-    const fs = Math.max(Math.min((w.y1 - w.y0) * 0.7, 28), 12);
-    ctx.font = `bold ${fs}px monospace`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    // Background pill
+    ctx.roundRect(w.x0-pad, w.y0-pad, (w.x1-w.x0)+pad*2, (w.y1-w.y0)+pad*2, 4);
+    ctx.fill(); ctx.stroke();
+    const fs = Math.max(Math.min((w.y1-w.y0)*0.7, 28), 12);
+    ctx.font = 'bold '+fs+'px monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     const tw = ctx.measureText(w.text).width;
-    ctx.fillStyle = isSelected ? 'rgba(0,0,0,0.75)' : 'rgba(0,0,0,0.55)';
-    ctx.beginPath();
-    ctx.roundRect(w.x0 - pad, w.y0 - fs - 4, tw + 8, fs + 6, 3);
-    ctx.fill();
-    ctx.fillStyle = isSelected ? '#00e5a0' : '#ffffff';
-    ctx.fillText(w.text, w.x0 - pad + 4, w.y0 - fs - 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.beginPath(); ctx.roundRect(w.x0-pad, w.y0-fs-4, tw+8, fs+6, 3); ctx.fill();
+    ctx.fillStyle = sel ? '#00e5a0' : '#ffffff';
+    ctx.fillText(w.text, w.x0-pad+4, w.y0-fs-1);
   });
 }
 
 function onCanvasClick(e) {
   const canvas = document.getElementById('ocr-canvas');
-  const rect   = canvas.getBoundingClientRect();
-  // Scale from display size to canvas pixel size
-  const scaleX = canvas.width  / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const cx = (e.clientX - rect.left)  * scaleX;
-  const cy = (e.clientY - rect.top)   * scaleY;
-  const pad = 6;
-
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const cy = (e.clientY - rect.top)  * (canvas.height / rect.height);
   for (let i = 0; i < ocrWords.length; i++) {
-    const w = ocrWords[i];
-    if (cx >= w.x0 - pad && cx <= w.x1 + pad && cy >= w.y0 - pad && cy <= w.y1 + pad) {
+    const w = ocrWords[i], pad = 8;
+    if (cx >= w.x0-pad && cx <= w.x1+pad && cy >= w.y0-pad && cy <= w.y1+pad) {
       selected.has(i) ? selected.delete(i) : selected.add(i);
       drawCanvas();
       const btn = document.getElementById('ocr-add-btn');
       btn.disabled = selected.size === 0;
-      btn.textContent = selected.size > 0 ? `Add Selected (${selected.size})` : 'Add Selected';
+      btn.textContent = selected.size > 0 ? 'Add Selected ('+selected.size+')' : 'Add Selected';
       document.getElementById('ocr-status').textContent =
-        selected.size > 0 ? `${selected.size} selected — tap Add Selected.` : `${ocrWords.length} word(s) — tap to select.`;
+        selected.size > 0 ? selected.size+' selected.' : ocrWords.length+' word(s) \u2014 tap to select.';
       break;
     }
   }
@@ -1060,9 +1007,7 @@ function onCanvasClick(e) {
 function ocrAddSelected() {
   if (selected.size === 0) return;
   selected.forEach(i => { if (ocrWords[i]) addScan(ocrWords[i].text, 'OCR'); });
-  selected.clear(); ocrWords = [];
-  ocrRetake();
-  setMode('barcode');
+  selected.clear(); ocrWords = []; ocrRetake(); setMode('barcode');
 }
 
 function ocrRetake() {
@@ -1074,214 +1019,10 @@ function ocrRetake() {
   document.getElementById('ocr-add-btn').style.display  = 'none';
   document.getElementById('ocr-status').textContent = 'Point camera at text and tap Capture.';
   if (ocrStream) {
-    document.getElementById('ocr-video').style.display   = '';
+    document.getElementById('ocr-video').style.display       = '';
     document.getElementById('ocr-capture-btn').style.display = '';
     document.getElementById('ocr-retake-btn').style.display  = 'none';
-  } else {
-    ocrStartCamera();
-  }
-}
-
-renderList();
-
-// ── Mode switching ────────────────────────────────────────────────
-let currentMode = 'barcode';
-
-function setMode(mode) {
-  if (mode === currentMode) return;
-  currentMode = mode;
-
-  document.getElementById('tab-barcode').classList.toggle('active', mode === 'barcode');
-  document.getElementById('tab-ocr').classList.toggle('active', mode === 'ocr');
-  document.getElementById('barcode-panel').style.display = mode === 'barcode' ? 'block' : 'none';
-  document.getElementById('ocr-panel').style.display     = mode === 'ocr'     ? 'block' : 'none';
-
-  if (mode === 'ocr') {
-    // Stop barcode scanner if running
-    if (stream) stopCamera();
-    ocrStartCamera();
-  } else {
-    ocrStopCamera();
-    ocrRetake();
-  }
-}
-
-// ── OCR camera ────────────────────────────────────────────────────
-let ocrStream = null;
-
-async function ocrStartCamera() {
-  try {
-    ocrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    const v = document.getElementById('ocr-video');
-    v.srcObject = ocrStream;
-    v.style.display = '';
-    document.getElementById('ocr-img').style.display = 'none';
-    document.getElementById('ocr-capture-btn').style.display = '';
-    document.getElementById('ocr-retake-btn').style.display  = 'none';
-    document.getElementById('ocr-add-btn').style.display     = 'none';
-    document.getElementById('ocr-svg').innerHTML = '';
-    document.getElementById('ocr-status').textContent = 'Point camera at text and tap Capture.';
-  } catch(e) {
-    document.getElementById('ocr-status').textContent = 'Camera error: ' + e.message;
-  }
-}
-
-function ocrStopCamera() {
-  if (ocrStream) { ocrStream.getTracks().forEach(t => t.stop()); ocrStream = null; }
-}
-
-// ── Capture + OCR ─────────────────────────────────────────────────
-let ocrWords = [];    // {text, x, y, w, h} in 0-1 normalised coords
-let selected = new Set();
-
-async function ocrCapture() {
-  const video = document.getElementById('ocr-video');
-  if (!ocrStream || video.readyState < 2) return;
-
-  // Snapshot to canvas
-  const canvas = document.createElement('canvas');
-  canvas.width  = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext('2d').drawImage(video, 0, 0);
-
-  // Freeze display
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-  const img = document.getElementById('ocr-img');
-  img.src = dataUrl;
-  img.style.display = '';
-  video.style.display = 'none';
-
-  document.getElementById('ocr-capture-btn').style.display = 'none';
-  document.getElementById('ocr-retake-btn').style.display  = '';
-  document.getElementById('ocr-status').textContent = 'Running OCR…';
-  const prog = document.getElementById('ocr-progress');
-  const bar  = document.getElementById('ocr-bar');
-  prog.style.display = '';
-  bar.style.width = '0%';
-
-  selected.clear();
-  ocrWords = [];
-  document.getElementById('ocr-svg').innerHTML = '';
-
-  try {
-    const result = await Tesseract.recognize(canvas, 'eng', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          bar.style.width = (m.progress * 100).toFixed(0) + '%';
-        }
-      }
-    });
-
-    prog.style.display = 'none';
-    const W = canvas.width, H = canvas.height;
-
-    // Collect words with confidence > 40
-    ocrWords = result.data.words
-      .filter(w => w.confidence > 40 && w.text.trim().length > 1)
-      .map(w => ({
-        text: w.text.trim(),
-        x: w.bbox.x0 / W,
-        y: w.bbox.y0 / H,
-        w: (w.bbox.x1 - w.bbox.x0) / W,
-        h: (w.bbox.y1 - w.bbox.y0) / H,
-        conf: w.confidence
-      }));
-
-    if (ocrWords.length === 0) {
-      document.getElementById('ocr-status').textContent = 'No text detected. Try retaking with better lighting.';
-      return;
-    }
-
-    renderOcrOverlay();
-    document.getElementById('ocr-status').textContent = `${ocrWords.length} word(s) found — tap to select.`;
-    document.getElementById('ocr-add-btn').style.display = '';
-    updateAddBtn();
-
-  } catch(e) {
-    prog.style.display = 'none';
-    document.getElementById('ocr-status').textContent = 'OCR error: ' + e.message;
-  }
-}
-
-function renderOcrOverlay() {
-  const svg = document.getElementById('ocr-svg');
-  svg.innerHTML = '';
-  svg.setAttribute('viewBox', '0 0 1 1');
-
-  ocrWords.forEach((word, i) => {
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-
-    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect.setAttribute('x', word.x);
-    rect.setAttribute('y', word.y);
-    rect.setAttribute('width', word.w);
-    rect.setAttribute('height', word.h);
-    rect.setAttribute('rx', 0.004);
-    if (selected.has(i)) rect.classList.add('selected');
-    rect.addEventListener('click', () => toggleWord(i, rect));
-
-    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    label.setAttribute('x', word.x + word.w / 2);
-    label.setAttribute('y', word.y + word.h / 2 + 0.008);
-    label.setAttribute('text-anchor', 'middle');
-    label.setAttribute('font-size', Math.max(word.h * 0.55, 0.018));
-    label.textContent = word.text;
-
-    g.appendChild(rect);
-    g.appendChild(label);
-    svg.appendChild(g);
-  });
-}
-
-function toggleWord(i, rect) {
-  if (selected.has(i)) {
-    selected.delete(i);
-    rect.classList.remove('selected');
-  } else {
-    selected.add(i);
-    rect.classList.add('selected');
-  }
-  updateAddBtn();
-}
-
-function updateAddBtn() {
-  const btn = document.getElementById('ocr-add-btn');
-  btn.textContent = selected.size > 0
-    ? `Add Selected (${selected.size})`
-    : 'Add Selected';
-  btn.disabled = selected.size === 0;
-}
-
-function ocrAddSelected() {
-  if (selected.size === 0) return;
-  selected.forEach(i => {
-    const word = ocrWords[i];
-    if (word) addScan(word.text, 'OCR');
-  });
-  selected.clear();
-  updateAddBtn();
-  // Go back to live camera
-  ocrRetake();
-  setMode('barcode');  // switch back so user sees the list
-}
-
-function ocrRetake() {
-  selected.clear();
-  ocrWords = [];
-  document.getElementById('ocr-svg').innerHTML = '';
-  const img = document.getElementById('ocr-img');
-  img.style.display = 'none';
-  img.src = '';
-  document.getElementById('ocr-progress').style.display = 'none';
-  document.getElementById('ocr-add-btn').style.display  = 'none';
-  document.getElementById('ocr-status').textContent = 'Point camera at text and tap Capture.';
-  if (ocrStream) {
-    document.getElementById('ocr-video').style.display = '';
-    document.getElementById('ocr-capture-btn').style.display = '';
-    document.getElementById('ocr-retake-btn').style.display  = 'none';
-  } else {
-    ocrStartCamera();
-  }
+  } else { ocrStartCamera(); }
 }
 
 </script>
