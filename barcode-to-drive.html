@@ -884,8 +884,8 @@ function setMode(mode) {
 
   document.getElementById('tab-barcode').classList.toggle('active', mode === 'barcode');
   document.getElementById('tab-ocr').classList.toggle('active', mode === 'ocr');
-  document.getElementById('barcode-panel').style.display = mode === 'barcode' ? '' : 'none';
-  document.getElementById('ocr-panel').style.display     = mode === 'ocr'     ? '' : 'none';
+  document.getElementById('barcode-panel').style.display = mode === 'barcode' ? 'block' : 'none';
+  document.getElementById('ocr-panel').style.display     = mode === 'ocr'     ? 'block' : 'none';
 
   if (mode === 'ocr') {
     // Stop barcode scanner if running
