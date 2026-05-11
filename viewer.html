@@ -405,14 +405,18 @@ async function clearCsv() {
   const headers = { Authorization: `token ${token}`, 'Content-Type': 'application/json' };
 
   try {
-    const getRes = await fetch(apiUrl, { headers });
-    if (!getRes.ok) return;
+    const getRes = await fetch(apiUrl, {
+      headers: { ...headers, Accept: 'application/vnd.github+json' }
+    });
+    if (!getRes.ok) { showErr('✗ GitHub ' + getRes.status); return; }
     const data = await getRes.json();
+    if (!data.sha) { showErr('✗ No SHA returned — cannot update file.'); return; }
     const blank = btoa(unescape(encodeURIComponent('Timestamp,Barcode,Format\n')));
-    await fetch(apiUrl, {
+    const putRes = await fetch(apiUrl, {
       method: 'PUT', headers,
       body: JSON.stringify({ message: 'Clear barcodes', content: blank, sha: data.sha })
     });
+    if (!putRes.ok) { const e = await putRes.json(); showErr('✗ ' + (e.message || putRes.status)); return; }
     knownRows.clear(); lastRowCount = 0;
     fetchCsv();
   } catch(e) { showErr('✗ ' + e.message); }
