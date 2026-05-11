@@ -447,6 +447,17 @@
           <path stroke-linecap="round" d="M3 9V5h4M21 9V5h-4M3 15v4h4M21 15v4h-4"/>
         </svg>
       </button>
+      <select id="cooldown-select" title="Scan cooldown" style="
+        background:var(--surface);border:1px solid var(--border);border-radius:5px;
+        color:var(--text);font-family:'Space Mono',monospace;font-size:11px;
+        padding:8px 6px;cursor:pointer;outline:none;">
+        <option value="500">0.5s</option>
+        <option value="1000">1s</option>
+        <option value="1500" selected>1.5s</option>
+        <option value="2000">2s</option>
+        <option value="3000">3s</option>
+        <option value="5000">5s</option>
+      </select>
     </div>
 
     <div id="flash">
@@ -554,6 +565,7 @@ let detector     = null;
 let rafId        = null;
 let lastVal      = null;
 let cooldownEnd  = 0;
+function getCooldown() { return parseInt(document.getElementById('cooldown-select').value) || 1500; }
 
 // ── Compatibility ─────────────────────────────────────────────────
 function checkCompat() {
@@ -578,7 +590,7 @@ async function scanFrame() {
       for (const b of barcodes) {
         if (b.rawValue === lastVal && now < cooldownEnd) continue;
         lastVal     = b.rawValue;
-        cooldownEnd = now + 1500;
+        cooldownEnd = now + getCooldown();
         addScan(b.rawValue, b.format);
         break;
       }
@@ -1016,7 +1028,7 @@ async function ocrCapture() {
     });
     prog.style.display = 'none';
     ocrWords = result.data.words
-      .filter(w => w.confidence > 40 && w.text.trim().length > 1)
+      .filter(w => w.confidence > 20 && w.text.trim().length > 0)
       .map(w => ({ text: w.text.trim(), x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1 }));
     if (ocrWords.length === 0) {
       document.getElementById('ocr-status').textContent = 'No text found. Try better lighting or zoom in.';
