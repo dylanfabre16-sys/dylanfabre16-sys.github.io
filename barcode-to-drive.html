@@ -441,6 +441,12 @@
         <option value="2">2x</option>
         <option value="3">3x</option>
       </select>
+      <button class="btn btn-ghost" id="focus-btn" onclick="triggerFocus('video')" disabled title="Focus">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path stroke-linecap="round" d="M3 9V5h4M21 9V5h-4M3 15v4h4M21 15v4h-4"/>
+        </svg>
+      </button>
     </div>
 
     <div id="flash">
@@ -484,6 +490,12 @@
           <option value="2">2x</option>
           <option value="3">3x</option>
         </select>
+        <button class="btn btn-ghost" id="ocr-focus-btn" onclick="triggerFocus('ocr-video')" disabled title="Focus">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path stroke-linecap="round" d="M3 9V5h4M21 9V5h-4M3 15v4h4M21 15v4h-4"/>
+          </svg>
+        </button>
       </div>
     </div><!-- end ocr-panel -->
 
@@ -491,6 +503,14 @@
 
   <div class="panel">
     <div class="panel-label">Scanned Barcodes</div>
+
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <input id="manual-input" type="text" placeholder="Type part number…" style="
+        flex:1;background:var(--surface);border:1px solid var(--border);border-radius:5px;
+        padding:8px 10px;font-family:'Space Mono',monospace;font-size:12px;
+        color:var(--text);outline:none;" onkeydown="if(event.key==='Enter')manualAdd()"/>
+      <button class="btn btn-primary" onclick="manualAdd()" style="white-space:nowrap;">+ Add</button>
+    </div>
 
     <div class="list-header">
       <button class="btn btn-del" onclick="clearList()">Clear All</button>
@@ -604,6 +624,7 @@ async function startCamera() {
         const caps  = track.getCapabilities ? track.getCapabilities() : {};
         if (caps.torch) document.getElementById('torch-btn').disabled = false;
         document.getElementById('zoom-select').disabled = false;
+        if (caps.focusMode || caps.pointOfInterest) document.getElementById('focus-btn').disabled = false;
       });
     };
 
@@ -642,6 +663,7 @@ function stopCamera() {
   document.getElementById('torch-btn').disabled = true;
   document.getElementById('torch-btn').classList.remove('torch-active');
   document.getElementById('zoom-select').disabled = true;
+  document.getElementById('focus-btn').disabled = true;
   document.getElementById('dot').classList.remove('live');
 }
 
@@ -852,6 +874,55 @@ async function applyZoom() {
   } catch(_) {}
 }
 
+// ── Focus ─────────────────────────────────────────────────────────
+async function triggerFocus(videoId, x, y) {
+  // x, y are normalised 0-1 point of interest (default centre)
+  const src = videoId === 'video' ? stream : ocrStream;
+  if (!src) return;
+  const track = src.getVideoTracks()[0];
+  const caps  = track.getCapabilities ? track.getCapabilities() : {};
+  const constraints = { advanced: [{}] };
+  if (caps.focusMode && caps.focusMode.includes('single-shot'))
+    constraints.advanced[0].focusMode = 'single-shot';
+  if (caps.pointOfInterest) {
+    constraints.advanced[0].pointOfInterest = { x: x ?? 0.5, y: y ?? 0.5 };
+  }
+  try {
+    await track.applyConstraints(constraints);
+    // Flash the focus button green briefly
+    const btn = document.getElementById(videoId === 'video' ? 'focus-btn' : 'ocr-focus-btn');
+    if (btn) { btn.style.borderColor = 'var(--accent)'; setTimeout(() => btn.style.borderColor = '', 600); }
+  } catch(_) {}
+}
+
+// Tap-to-focus on OCR video
+document.getElementById('ocr-video').addEventListener('click', e => {
+  if (!ocrStream) return;
+  const el   = document.getElementById('ocr-video');
+  const rect = el.getBoundingClientRect();
+  const x    = (e.clientX - rect.left) / rect.width;
+  const y    = (e.clientY - rect.top)  / rect.height;
+  triggerFocus('ocr-video', x, y);
+});
+
+// Tap-to-focus on barcode video
+document.getElementById('video').addEventListener('click', e => {
+  if (!stream) return;
+  const el   = document.getElementById('video');
+  const rect = el.getBoundingClientRect();
+  triggerFocus('video', (e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
+});
+
+// ── Manual input ──────────────────────────────────────────────────
+function manualAdd() {
+  const inp = document.getElementById('manual-input');
+  const val = inp.value.trim();
+  if (!val) return;
+  addScan(val, 'MANUAL');
+  inp.value = '';
+  inp.focus();
+}
+
 renderList();
 
 // ── Mode switching ────────────────────────────────────────────────
@@ -889,6 +960,7 @@ async function ocrStartCamera() {
     document.getElementById('ocr-torch-btn').disabled = !caps.torch;
     document.getElementById('ocr-zoom').disabled      = !caps.zoom;
     if (caps.zoom) document.getElementById('ocr-zoom').style.color = 'var(--text)';
+    document.getElementById('ocr-focus-btn').disabled = !(caps.focusMode || caps.pointOfInterest);
   } catch(e) {
     document.getElementById('ocr-status').textContent = 'Camera error: ' + e.message;
   }
@@ -900,6 +972,7 @@ function ocrStopCamera() {
   document.getElementById('ocr-torch-btn').classList.remove('torch-active');
   document.getElementById('ocr-torch-btn').disabled = true;
   document.getElementById('ocr-zoom').disabled      = true;
+  document.getElementById('ocr-focus-btn').disabled = true;
 }
 
 async function ocrToggleTorch() {
