@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scan → Drive</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0e0e0f;
+    --surface: #18181a;
+    --border: #2a2a2e;
+    --accent: #00e5a0;
+    --accent-dim: #00e5a020;
+    --text: #e8e8ea;
+    --muted: #6b6b72;
+    --danger: #ff4d6a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .sep { color: var(--border); }
+
+  .subtitle {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    margin-left: auto;
+    transition: background 0.3s;
+  }
+  .dot.live { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: blink 1.5s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  @media (max-width: 680px) { main { grid-template-columns: 1fr; } }
+
+  .panel { padding: 18px; border-right: 1px solid var(--border); }
+  .panel:last-child { border-right: none; }
+
+  .panel-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  #cam-wrap {
+    width: 100%;
+    aspect-ratio: 4/3;
+    background: #000;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    position: relative;
+  }
+
+  #cam-wrap video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .frame {
+    width: 62%;
+    aspect-ratio: 1.6;
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.35);
+  }
+
+  .scanline {
+    position: absolute;
+    width: 62%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: sweep 2s ease-in-out infinite;
+  }
+
+  @keyframes sweep {
+    0%   { top: 20%; opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { top: 80%; opacity: 0; }
+  }
+
+  #placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  #placeholder svg { opacity: .35; }
+
+  .controls { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 14px;
+    border-radius: 5px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: none;
+    transition: filter .15s, opacity .15s;
+  }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:not(:disabled):hover { filter: brightness(1.1); }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:not(:disabled):hover { color: var(--text); border-color: #555; }
+  .btn-del { background: transparent; color: var(--danger); border: 1px solid #ff4d6a22; font-size: 10px; }
+  .btn-del:not(:disabled):hover { background: #ff4d6a12; }
+
+  #flash {
+    margin-top: 12px;
+    padding: 9px 13px;
+    background: var(--accent-dim);
+    border: 1px solid #00e5a035;
+    border-radius: 5px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity .25s;
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #flash.show { opacity: 1; }
+
+  .list-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .count { margin-left: auto; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); }
+
+  #scan-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  #scan-list::-webkit-scrollbar { width: 3px; }
+  #scan-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 9px 11px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    animation: slideIn .18s ease;
+  }
+
+  @keyframes slideIn { from { opacity:0; transform: translateY(-5px); } to { opacity:1; transform:none; } }
+
+  .item .val {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .item .fmt, .item .time {
+    font-size: 10px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    white-space: nowrap;
+  }
+
+  .item button {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); line-height: 0; padding: 2px; border-radius: 3px;
+  }
+  .item button:hover { color: var(--danger); }
+
+  .empty { padding: 28px 0; text-align: center; color: var(--muted); font-size: 13px; }
+
+  .divider { border-top: 1px solid var(--border); margin: 18px 0; }
+
+  .fname-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .fname-row label {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+  }
+
+  .fname-row input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--text);
+    outline: none;
+  }
+  .fname-row input:focus { border-color: var(--accent); }
+
+  #drive-msg {
+    margin-top: 10px;
+    padding: 9px 13px;
+    border-radius: 5px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    display: none;
+    line-height: 1.5;
+    word-break: break-word;
+  }
+  #drive-msg.info { background: #1a2540; border: 1px solid #3355aa40; color: #7ab2ff; display: block; }
+  #drive-msg.ok   { background: var(--accent-dim); border: 1px solid #00e5a040; color: var(--accent); display: block; }
+  #drive-msg.err  { background: #2a1520; border: 1px solid #ff4d6a40; color: var(--danger); display: block; }
+
+  #compat-warn {
+    background: #2a1e10;
+    border: 1px solid #ffb74040;
+    color: #ffb740;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 10px 14px;
+    border-radius: 5px;
+    margin-bottom: 12px;
+    display: none;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">Scan</span>
+  <span class="sep">→</span>
+  <span class="logo" style="color:var(--text)">Drive</span>
+  <span class="subtitle">barcode logger</span>
+  <div class="dot" id="dot"></div>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="panel-label">Camera</div>
+
+    <div id="compat-warn"></div>
+
+    <div id="cam-wrap">
+      <div id="placeholder">
+        <svg width="38" height="38" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        <span id="placeholder-text">Press Start Camera</span>
+      </div>
+      <video id="video" autoplay muted playsinline style="display:none"></video>
+      <div class="overlay" id="overlay" style="display:none">
+        <div class="frame"></div>
+        <div class="scanline"></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-primary" id="start-btn" onclick="startCamera()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        Start Camera
+      </button>
+      <button class="btn btn-ghost" id="stop-btn" onclick="stopCamera()" disabled>Stop</button>
+    </div>
+
+    <div id="flash">
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+      </svg>
+      <span id="flash-val"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-label">Scanned Barcodes</div>
+
+    <div class="list-header">
+      <button class="btn btn-del" onclick="clearList()">Clear All</button>
+      <span class="count" id="count">0 items</span>
+    </div>
+
+    <div id="scan-list">
+      <div class="empty" id="empty">No barcodes scanned yet.</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="panel-label">Save to Google Drive</div>
+
+    <div class="fname-row">
+      <label>File</label>
+      <input id="fname" type="text" value="barcodes.txt" />
+    </div>
+
+    <button class="btn btn-primary" id="drive-btn" onclick="saveToDrive()" style="width:100%;justify-content:center;">
+      <svg width="13" height="13" viewBox="0 0 87.3 78" fill="currentColor">
+        <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+        <path d="M43.65 25L29.9 1.2C28.55 2 27.4 3.1 26.6 4.5L1.2 48.5C.4 49.9 0 51.45 0 53h27.5z" fill="#00ac47"/>
+        <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.8l5.85 11.5z" fill="#ea4335"/>
+        <path d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.95 0H34.35c-1.55 0-3.1.45-4.45 1.2z" fill="#00832d"/>
+        <path d="M59.8 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.45 1.2h50.9c1.55 0 3.1-.4 4.45-1.2z" fill="#2684fc"/>
+        <path d="M73.4 26.5l-12.6-21.8C60 3.3 58.85 2.2 57.5 1.4L43.75 25 59.9 53h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+      </svg>
+      Save to Drive
+    </button>
+
+    <div id="drive-msg"></div>
+  </div>
+</main>
+
+<script>
+const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
+const DRIVE_MCP     = 'https://drivemcp.googleapis.com/mcp/v1';
+
+let scans        = [];
+let stream       = null;
+let detector     = null;
+let rafId        = null;
+let lastVal      = null;
+let cooldownEnd  = 0;
+
+// ── Compatibility ─────────────────────────────────────────────────
+function checkCompat() {
+  if (!('BarcodeDetector' in window)) {
+    const w = document.getElementById('compat-warn');
+    w.style.display = 'block';
+    w.textContent = '⚠ BarcodeDetector not supported. Use Chrome or Edge on desktop/Android.';
+    document.getElementById('start-btn').disabled = true;
+    return false;
+  }
+  return true;
+}
+
+// ── Scan loop ─────────────────────────────────────────────────────
+async function scanFrame() {
+  if (!stream) return;
+  const video = document.getElementById('video');
+  if (video.readyState >= 2) {
+    try {
+      const barcodes = await detector.detect(video);
+      const now = Date.now();
+      for (const b of barcodes) {
+        if (b.rawValue === lastVal && now < cooldownEnd) continue;
+        lastVal     = b.rawValue;
+        cooldownEnd = now + 1500;
+        addScan(b.rawValue, b.format);
+        break;
+      }
+    } catch (_) {}
+  }
+  rafId = requestAnimationFrame(scanFrame);
+}
+
+// ── Camera ────────────────────────────────────────────────────────
+async function startCamera() {
+  if (!checkCompat()) return;
+
+  document.getElementById('start-btn').disabled = true;
+  document.getElementById('placeholder-text').textContent = 'Starting…';
+
+  try {
+    detector = new BarcodeDetector({
+      formats: ['aztec','codabar','code_39','code_93','code_128',
+                'data_matrix','ean_8','ean_13','itf','pdf417',
+                'qr_code','upc_a','upc_e']
+    });
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    } catch (_) {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    }
+
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    video.style.display = '';
+    document.getElementById('placeholder').style.display = 'none';
+    document.getElementById('overlay').style.display = '';
+    document.getElementById('stop-btn').disabled = false;
+    document.getElementById('dot').classList.add('live');
+
+    video.onloadedmetadata = () => {
+      video.play().then(() => { rafId = requestAnimationFrame(scanFrame); });
+    };
+
+  } catch (e) {
+    document.getElementById('start-btn').disabled = false;
+    stream = null;
+    const w = document.getElementById('compat-warn');
+    w.style.display = 'block';
+    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+      w.innerHTML = '&#9888; Camera permission was denied.<br><br>'
+        + 'To fix in Chrome on Android:<br>'
+        + '1. Tap the <b>info icon</b> in the address bar<br>'
+        + '2. Tap <b>Permissions &rarr; Camera &rarr; Allow</b><br>'
+        + '3. Reload and try again';
+    } else {
+      w.textContent = '\u26a0 Camera error: ' + e.name + ' — ' + e.message;
+    }
+    document.getElementById('placeholder-text').textContent = 'Permission needed — see warning above';
+  }
+}
+
+function stopCamera() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+
+  const video = document.getElementById('video');
+  video.srcObject = null;
+  video.style.display = 'none';
+
+  document.getElementById('placeholder').style.display = '';
+  document.getElementById('placeholder-text').textContent = 'Press Start Camera';
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('start-btn').disabled = false;
+  document.getElementById('stop-btn').disabled = true;
+  document.getElementById('dot').classList.remove('live');
+}
+
+// ── List ──────────────────────────────────────────────────────────
+function ts() { return new Date().toTimeString().slice(0, 8); }
+
+function addScan(value, format) {
+  scans.push({ value, format: format || '', time: ts() });
+  renderList();
+  flash(value);
+}
+
+function removeItem(i) { scans.splice(i, 1); renderList(); }
+
+function clearList() { scans = []; lastVal = null; renderList(); }
+
+function renderList() {
+  const list  = document.getElementById('scan-list');
+  const empty = document.getElementById('empty');
+  document.getElementById('count').textContent =
+    `${scans.length} item${scans.length !== 1 ? 's' : ''}`;
+
+  if (scans.length === 0) {
+    list.innerHTML = '';
+    list.appendChild(empty);
+    return;
+  }
+  if (empty.parentNode) empty.remove();
+  list.innerHTML = '';
+
+  [...scans].reverse().forEach((s, ri) => {
+    const i = scans.length - 1 - ri;
+    const el = document.createElement('div');
+    el.className = 'item';
+    el.innerHTML = `
+      <span class="val" title="${esc(s.value)}">${esc(s.value)}</span>
+      <span class="fmt">${s.format}</span>
+      <span class="time">${s.time}</span>
+      <button onclick="removeItem(${i})" title="Remove">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>`;
+    list.appendChild(el);
+  });
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function flash(val) {
+  const el = document.getElementById('flash');
+  document.getElementById('flash-val').textContent = val;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// ── Drive ─────────────────────────────────────────────────────────
+async function saveToDrive() {
+  if (scans.length === 0) { driveMsg('err', '✗ No barcodes to save.'); return; }
+
+  const fname = document.getElementById('fname').value.trim() || 'barcodes.txt';
+  const btn   = document.getElementById('drive-btn');
+  btn.disabled = true;
+
+  const body = [
+    'Time\tFormat\tBarcode',
+    '─'.repeat(40),
+    ...scans.map(s => `${s.time}\t${s.format}\t${s.value}`),
+    '',
+    `Total: ${scans.length} scan(s)`,
+    `Exported: ${new Date().toLocaleString()}`
+  ].join('\n');
+
+  driveMsg('info', 'Saving to Google Drive…');
+
+  try {
+    const res = await fetch(ANTHROPIC_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: `Create a new plain text file in Google Drive named "${fname}" with this exact content:\n\n${body}\n\nReply with the file name and ID once done.`
+        }],
+        mcp_servers: [{ type: 'url', url: DRIVE_MCP, name: 'google-drive' }]
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+
+    const text = data.content.filter(b => b.type === 'text').map(b => b.text).join(' ');
+    driveMsg('ok', '✓ ' + (text.slice(0, 300) || 'Saved.'));
+  } catch (e) {
+    driveMsg('err', '✗ ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function driveMsg(type, msg) {
+  const el = document.getElementById('drive-msg');
+  el.className = type;
+  el.textContent = msg;
+}
+
+renderList();
+</script>
+</body>
+</html>
