@@ -973,6 +973,8 @@ async function ocrStartCamera() {
     document.getElementById('ocr-zoom').disabled      = !caps.zoom;
     if (caps.zoom) document.getElementById('ocr-zoom').style.color = 'var(--text)';
     document.getElementById('ocr-focus-btn').disabled = !(caps.focusMode || caps.pointOfInterest);
+    // Re-apply zoom if user had it set
+    await ocrApplyZoom();
   } catch(e) {
     document.getElementById('ocr-status').textContent = 'Camera error: ' + e.message;
   }
@@ -1092,7 +1094,7 @@ function onCanvasClick(e) {
 function ocrAddSelected() {
   if (selected.size === 0) return;
   selected.forEach(i => { if (ocrWords[i]) addScan(ocrWords[i].text, 'OCR'); });
-  selected.clear(); ocrWords = []; ocrRetake(); setMode('barcode');
+  selected.clear(); ocrWords = []; ocrRetake();
 }
 
 function ocrRetake() {
