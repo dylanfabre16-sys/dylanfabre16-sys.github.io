@@ -185,6 +185,21 @@
   }
 
   td.barcode { color: var(--accent); font-size: 13px; }
+  .copy-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 3px 6px;
+    margin-left: 8px;
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    vertical-align: middle;
+    transition: all .15s;
+  }
+  .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .copy-btn.copied { color: var(--accent); border-color: var(--accent); }
   td.format  { color: var(--muted); font-size: 11px; }
   td.ts      { color: var(--muted); font-size: 11px; white-space: nowrap; }
   td.idx     { color: var(--border); font-size: 10px; width: 40px; }
@@ -381,7 +396,11 @@ function renderTable(csv) {
         if (ci === 1) cls = 'barcode';
         else if (ci === 2) cls = 'format';
         else cls = 'ts';
-        return `<td class="${cls}">${c.trim()}</td>`;
+        const val = c.trim();
+        if (ci === 1) {
+          return `<td class="${cls}">${val}<button class="copy-btn" onclick="copyVal(this,'${val.replace(/'/g,"\\'")}')">copy</button></td>`;
+        }
+        return `<td class="${cls}">${val}</td>`;
       }).join('');
     tbody.appendChild(tr);
   });
@@ -440,6 +459,13 @@ function startRefresh() {
 // Init
 fetchCsv();
 startRefresh();
+function copyVal(btn, val) {
+  navigator.clipboard.writeText(val).then(() => {
+    btn.textContent = '✓';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1500);
+  }).catch(() => { btn.textContent = 'err'; });
+}
 </script>
 </body>
 </html>
