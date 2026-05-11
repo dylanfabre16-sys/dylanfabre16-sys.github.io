@@ -405,7 +405,8 @@ async function clearCsv() {
   const headers = { Authorization: `token ${token}`, 'Content-Type': 'application/json' };
 
   try {
-    const getRes = await fetch(apiUrl, {
+    const getRes = await fetch(apiUrl + '?_=' + Date.now(), {
+      cache: 'no-store',
       headers: { ...headers, Accept: 'application/vnd.github+json' }
     });
     if (!getRes.ok) { showErr('✗ GitHub ' + getRes.status); return; }
