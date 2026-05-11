@@ -547,18 +547,19 @@ function removeItem(i) { scans.splice(i, 1); renderList(); }
 
 function clearList() { scans = []; lastVal = null; renderList(); }
 
+const emptyEl = document.getElementById('empty');
+
 function renderList() {
-  const list  = document.getElementById('scan-list');
-  const empty = document.getElementById('empty');
+  const list = document.getElementById('scan-list');
   document.getElementById('count').textContent =
     `${scans.length} item${scans.length !== 1 ? 's' : ''}`;
 
   if (scans.length === 0) {
     list.innerHTML = '';
-    list.appendChild(empty);
+    list.appendChild(emptyEl);
     return;
   }
-  if (empty.parentNode) empty.remove();
+  emptyEl.remove();
   list.innerHTML = '';
 
   [...scans].reverse().forEach((s, ri) => {
@@ -694,14 +695,21 @@ let audioCtx = null;
 function beep() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc  = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(1480, audioCtx.currentTime);
-    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
-    osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+    const play = () => {
+      const osc  = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1480, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+    };
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().then(play);
+    } else {
+      play();
+    }
   } catch(_) {}
 }
 
